@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.29323.36
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "pudding", "pudding.csproj", "{84FBABB7-850E-4630-A130-665CC9E42529}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{84FBABB7-850E-4630-A130-665CC9E42529}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{84FBABB7-850E-4630-A130-665CC9E42529}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{84FBABB7-850E-4630-A130-665CC9E42529}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{84FBABB7-850E-4630-A130-665CC9E42529}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {67180E21-7B75-4FCF-8D37-B38F4AD7CFEB}
+	EndGlobalSection
+EndGlobal
