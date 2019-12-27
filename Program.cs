@@ -14,9 +14,10 @@ namespace pudding
 Patch some lines to existing text file as well as has the ability to undo the patch
 Usage: pudding [-u] [-s] [-c comment-symbol] patch target
 
-    -u      do unpatch instead of patch
-    -s      safe mode, backup the original target file as <target>.bak
-    -u      comment symbol used by the target file, defaults to #
+    -u      Do unpatch instead of patch
+    -U      Remove ALL patches patched by this tool, in this case, <patch> can be omitted
+    -s      Safe mode, backup the original target file as <target>.bak
+    -c      Comment symbol used by the target file, defaults to #
 
     The name of a patch file is ending with .patch, defaults to patch.patch
 
@@ -55,6 +56,11 @@ Usage: pudding [-u] [-s] [-c comment-symbol] patch target
                 {
                     op = "unpatch";
                 }
+                else if (op == null && args[i] == "-U")
+                {
+                    op = "UNPATCH";
+                    Console.WriteLine("Warning: patch file will be ignored in -U mode");
+                }
                 else if (safe == null && args[i] == "-s")
                 {
                     safe = true;
@@ -63,6 +69,7 @@ Usage: pudding [-u] [-s] [-c comment-symbol] patch target
                 {
                     sep = args[++i];
                 }
+                /* This line should be before target == null */
                 else if (patch == null && args[i].EndsWith(".patch"))
                 {
                     patch = args[i];
@@ -81,9 +88,9 @@ Usage: pudding [-u] [-s] [-c comment-symbol] patch target
             safe = safe ?? false;
             sep = sep ?? "#";
             patch = patch ?? "patch.patch";
-            Trace.Assert(target != null, "Please specify the file to patch");
+            Trace.Assert(target != null, "You must specify the target file");
 
-            Trace.Assert(File.Exists(patch), $"Patch file {patch} doesn't exist");
+            Trace.Assert(op == "UNPATCH" || File.Exists(patch), $"Patch file {patch} doesn't exist");
             Trace.Assert(File.Exists(target), $"Target file {target} doesn't exist");
 
             Console.WriteLine($@"
@@ -112,22 +119,20 @@ target file:    {target}
                     Console.WriteLine("Unpatching...");
                     Unpatch(patch, target, sep);
                     break;
+                case "UNPATCH":
+                    Console.WriteLine("Unpatching...");
+                    UnpatchAll(target, sep);
+                    break;
             }
 
             Console.WriteLine("Done.");
         }
 
+        #region OPs
         static void Patch(string patch, string target, string sep)
         {
-            Random rnd = new Random();
-            string[] patchLines = File.ReadAllLines(patch);
-            for (int i = 0; i < patchLines.Length; i++)
-            {
-                int p = rnd.Next();
-                int q = rnd.Next();
-                int r = p ^ q;
-                patchLines[i] = $"{patchLines[i]} {sep} pudding|{p.ToString("X8")},{q.ToString("X8")},{r.ToString("X8")}";
-            }
+            string[] linesInPatchFile = File.ReadAllLines(patch);
+            var linesToAppend = linesInPatchFile.Select(patchLineRaw => TagPatchLine(patchLineRaw, sep));
 
             bool hasEOL = false;
             using (FileStream fs = File.OpenRead(target))
@@ -138,47 +143,76 @@ target file:    {target}
             }
 
             File.AppendAllLines(target, hasEOL ?
-                patchLines :
-                new string[] { string.Empty }.Union(patchLines));
+                linesToAppend :
+                new string[] { string.Empty }.Concat(linesToAppend));
         }
 
         static void Unpatch(string patch, string target, string sep)
         {
-            List<string> patchLineList = File.ReadAllLines(patch).ToList();
-            string[] targetLines = File.ReadAllLines(target);
-            List<string> outputTarget = new List<string>();
+            List<string> linesInPatchFile = File.ReadAllLines(patch).ToList();
+            string[] linesInTargetFile = File.ReadAllLines(target);
+            List<string> linesToOutput = new List<string>();
 
-            foreach (var targetLine in targetLines)
+            foreach (var line in linesInTargetFile)
             {
                 bool keep = true;
-                int lastSep = targetLine.LastIndexOf(sep);
-
-                if (lastSep >= 1 && lastSep < targetLine.Length - 2)
+                if (IsPatchedLine(line, sep, out string patchLineRaw) &&
+                    linesInPatchFile.Contains(patchLineRaw))
                 {
-                    string patchLine = targetLine.Substring(0, lastSep - 1);
-                    if (patchLineList.Contains(patchLine))
-                    {
-                        string comment = targetLine.Substring(lastSep + 2);
-                        Regex regex = new Regex(@"^pudding\|(?<p>[\dA-F]+),(?<q>[\dA-F]+),(?<r>[\dA-F]+)$");
-                        Match match = regex.Match(comment);
-                        if (match.Success &&
-                            (int.Parse(match.Groups["p"].Value, NumberStyles.HexNumber) ^
-                            int.Parse(match.Groups["q"].Value, NumberStyles.HexNumber)) ==
-                            int.Parse(match.Groups["r"].Value, NumberStyles.HexNumber))
-                        {
-                            keep = false;
-                            patchLineList.Remove(patchLine);
-                        }
-                    }
+                    keep = false;
+                    linesInPatchFile.Remove(patchLineRaw);
                 }
-
                 if (keep)
                 {
-                    outputTarget.Add(targetLine);
+                    linesToOutput.Add(line);
                 }
             }
 
-            File.WriteAllLines(target, outputTarget);
+            File.WriteAllLines(target, linesToOutput);
         }
+
+        static void UnpatchAll(string target, string sep)
+        {
+            string[] linesInTargetFile = File.ReadAllLines(target);
+            var linesToOutput = linesInTargetFile.Where(x => !IsPatchedLine(x, sep, out _));
+            File.WriteAllLines(target, linesToOutput);
+        }
+        #endregion
+
+        #region Tagging and Recognition
+        static string TagPatchLine(string patchLineRaw, string sep)
+        {
+            int p = rnd.Next();
+            int q = rnd.Next();
+            int r = p ^ q;
+            return $"{patchLineRaw} {sep} pudding|{p.ToString("X8")},{q.ToString("X8")},{r.ToString("X8")}";
+        }
+
+        static bool IsPatchedLine(string line, string sep, out string patchLineRaw)
+        {
+            int lastSep = line.LastIndexOf(sep);
+
+            if (lastSep >= 1 && lastSep < line.Length - 2)
+            {
+                patchLineRaw = line.Substring(0, lastSep - 1);
+                string tag = line.Substring(lastSep + 2);
+
+                Regex regex = new Regex(@"^pudding\|(?<p>[\dA-F]+),(?<q>[\dA-F]+),(?<r>[\dA-F]+)$");
+                Match match = regex.Match(tag);
+                if (match.Success &&
+                    (int.Parse(match.Groups["p"].Value, NumberStyles.HexNumber) ^
+                    int.Parse(match.Groups["q"].Value, NumberStyles.HexNumber)) ==
+                    int.Parse(match.Groups["r"].Value, NumberStyles.HexNumber))
+                {
+                    return true;
+                }
+            }
+
+            patchLineRaw = null;
+            return false;
+        }
+
+        static readonly Random rnd = new Random();
+        #endregion
     }
 }
